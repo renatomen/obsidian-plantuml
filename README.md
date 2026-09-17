@@ -8,15 +8,26 @@ Render [PlantUML](https://plantuml.com) Diagrams in [Obsidian](https://obsidian.
 
 ![Demonstration](https://i.joethei.space/c5CVp0aX6h.gif)
 
-This plugin uses either the [PlantUML Online Server](https://plantuml.com/server), or a local
-`.jar` file for rendering.
+This plugin can render with the [PlantUML Online Server](https://plantuml.com/server), a server you
+host yourself, a local `.jar` file, or a JavaScript build of PlantUML bundled into the plugin.
 
-You can also host your own server
+You can host your own server
 ([Docker](https://hub.docker.com/r/plantuml/plantuml-server) /
 [JEE](https://plantuml.com/de/server) /
 [PicoWeb](https://plantuml.com/de/picoweb)) and specify its address in the settings.
 
 Please note that using the local rendering method is not as performant as using a server.
+
+### Bundled renderer
+
+Set `Renderer` to `Bundled JavaScript engine` in the settings to render diagrams inside Obsidian
+itself, with no server, no Java and no network. It is the only option that works on mobile without
+a reachable server, and it works offline. Changing the setting takes effect after you reload
+Obsidian.
+
+The engine is bundled as an asset rather than downloaded at runtime, so it ships to every install
+whether or not you enable it. It also has real limits compared to the server and `.jar` backends —
+see `Known issues` below.
 
 ## Usage
 Create a fenced codeblock using `plantuml` as the language.
@@ -113,6 +124,14 @@ Following are a few known issues.
 - ASCII can only ever generate Sequence diagrams
 - The PicoWeb server does not support clickable links in png diagrams
 - Some languages like chinese are not rendered correctly -> Switch to SVG rendering
+
+The bundled JavaScript renderer additionally:
+- produces no clickable links, in either svg or png diagrams
+- produces no image map, so a `plantuml-map` block renders a picture with nothing to click and no warning
+- cannot produce ASCII art; `plantuml-ascii` blocks report that instead of rendering
+- does not support `!include <...>` of the standard library, `!theme`, emoji, or OpenIconic sprites, because the engine fetches those on demand and there is nothing to fetch offline
+- cannot render diagrams larger than 8192 pixels on a side
+- is a fixed PlantUML version, shipped with the plugin, so syntax newer than that version renders on the server backends but not on this one
 
 
 ## Installation
