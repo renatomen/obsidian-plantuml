@@ -69,6 +69,25 @@ export class Replacer {
 
 }
 
+/**
+ * split diagram source into the array of lines the bundled renderer expects
+ * @param source diagram source as handed to a processor
+ */
+export function toDiagramLines(source: string): string[] {
+    const lines = source.split(/\r\n|\r|\n/);
+
+    // DebouncedProcessors prepends `header + CRLF + themeHeader + CRLF`, and both
+    // header settings default to empty, so source normally arrives with two blank
+    // leading lines. PlantUML reads the first line as the diagram directive and
+    // rejects a blank one with `the following directive "" is not recognized`.
+    let start = 0;
+    let end = lines.length;
+    while (start < end && lines[start].trim().length === 0) start++;
+    while (end > start && lines[end - 1].trim().length === 0) end--;
+
+    return lines.slice(start, end);
+}
+
 export function insertImageWithMap(el: HTMLElement, image: string, map: string, encodedDiagram: string) {
     el.empty();
 

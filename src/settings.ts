@@ -3,6 +3,7 @@ import PlantumlPlugin from "./main";
 
 export interface PlantUMLSettings {
     server_url: string,
+    renderer: string;
     header: string;
     debounce: number;
     localJar: string;
@@ -17,6 +18,7 @@ export interface PlantUMLSettings {
 
 export const DEFAULT_SETTINGS: PlantUMLSettings = {
     server_url: 'https://www.plantuml.com/plantuml',
+    renderer: 'default',
     header: '',
     debounce: 3,
     localJar: '',
@@ -47,6 +49,19 @@ export class PlantUMLSettingsTab extends PluginSettingTab {
                     key: 'server_url',
                     placeholder: DEFAULT_SETTINGS.server_url,
                     defaultValue: DEFAULT_SETTINGS.server_url,
+                }
+            },
+            {
+                name: 'Renderer',
+                desc: 'Which backend renders your diagrams. The bundled JavaScript engine needs no server and no Java and works on mobile, but cannot produce ASCII art or clickable links. Takes effect after reloading Obsidian.',
+                control: {
+                    type: 'dropdown',
+                    key: 'renderer',
+                    defaultValue: DEFAULT_SETTINGS.renderer,
+                    options: {
+                        default: 'PlantUML server or local jar',
+                        js: 'Bundled JavaScript engine',
+                    }
                 }
             },
             {

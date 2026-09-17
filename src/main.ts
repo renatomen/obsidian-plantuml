@@ -9,6 +9,7 @@ import {DebouncedProcessors} from "./processors/debouncedProcessors";
 import {LOGO_SVG} from "./const";
 import {Processor} from "./processors/processor";
 import {ServerProcessor} from "./processors/serverProcessor";
+import {JsProcessor} from "./processors/jsProcessor";
 import {Replacer} from "./functions";
 import {PumlView, VIEW_TYPE} from "./PumlView";
 import localforage from "localforage";
@@ -45,6 +46,7 @@ export default class PlantumlPlugin extends Plugin {
 
     serverProcessor: Processor;
     localProcessor: Processor;
+    jsProcessor: Processor;
     replacer: Replacer;
 
     observer: MutationObserver;
@@ -58,6 +60,9 @@ export default class PlantumlPlugin extends Plugin {
     };
 
     getProcessor(): Processor {
+        if (this.settings.renderer === "js") {
+            return this.jsProcessor;
+        }
         if (Platform.isMobileApp) {
             return this.serverProcessor;
         }
@@ -74,6 +79,7 @@ export default class PlantumlPlugin extends Plugin {
             this.cache = new DiagramCache();
 
             this.serverProcessor = new ServerProcessor(this);
+            this.jsProcessor = new JsProcessor(this);
             if (Platform.isDesktopApp) {
                 this.localProcessor = new LocalProcessors(this);
             }
