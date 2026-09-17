@@ -14,6 +14,7 @@ export const HARD_RENDER_TIMEOUT_MS = 30000;
 
 const ENGINE_LOAD_FAILED = "Could not load the PlantUML engine";
 const RENDER_FAILED = "The PlantUML engine failed while rendering the diagram";
+const ENGINE_STUCK = "The PlantUML engine stopped responding. Reload Obsidian to render diagrams with the bundled renderer again.";
 
 interface RenderJob {
     lines: string[];
@@ -29,6 +30,7 @@ let current: RenderJob | null = null;
 let softTimer: ReturnType<typeof setTimeout> | null = null;
 let hardTimer: ReturnType<typeof setTimeout> | null = null;
 let engine: Promise<RenderToString> | null = null;
+let engineStuck = false;
 let loadEngine: EngineLoader = loadBundledEngine;
 
 async function loadBundledEngine(): Promise<RenderToString> {
@@ -96,6 +98,14 @@ function clearTimers(): void {
     hardTimer = null;
 }
 
+function failQueue(): void {
+    let job = queue.shift();
+    while (job !== undefined) {
+        rejectJob(job, new Error(ENGINE_STUCK));
+        job = queue.shift();
+    }
+}
+
 function release(job: RenderJob): void {
     if (current !== job) {
         return;
@@ -106,6 +116,11 @@ function release(job: RenderJob): void {
 }
 
 async function drain(): Promise<void> {
+    if (engineStuck) {
+        failQueue();
+        return;
+    }
+
     if (current !== null) {
         return;
     }
@@ -132,8 +147,9 @@ async function drain(): Promise<void> {
 
     hardTimer = armTimer(() => {
         hardTimer = null;
-        console.error("PlantUML engine never called back, releasing the render slot; the next diagram may be rendered with this diagram's output");
-        release(job);
+        engineStuck = true;
+        console.error("PlantUML engine never called back; treating it as unusable and failing every waiting diagram");
+        failQueue();
     }, HARD_RENDER_TIMEOUT_MS);
 
     try {
