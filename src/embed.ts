@@ -15,7 +15,11 @@ export class PumlEmbed extends Component implements EmbedChild {
 
     async loadFile() {
         const data = await this.plugin.app.vault.cachedRead(this.file);
-        await this.plugin.getProcessor().png(data, this.ctx.containerEl, null);
+        if (this.plugin.settings.defaultProcessor === "png") {
+            await this.plugin.getProcessor().png(data, this.ctx.containerEl, null);
+        } else {
+            await this.plugin.getProcessor().svg(data, this.ctx.containerEl, null);
+        }
     }
 
 }
