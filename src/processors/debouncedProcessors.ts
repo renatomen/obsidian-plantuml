@@ -19,7 +19,11 @@ export class DebouncedProcessors implements Processor {
     }
 
     default = async(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
-        await this.png(source, el, ctx);
+        if (this.plugin.settings.defaultProcessor === "png") {
+            await this.png(source, el, ctx);
+        } else {
+            await this.svg(source, el, ctx);
+        }
     }
 
     png = async (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
