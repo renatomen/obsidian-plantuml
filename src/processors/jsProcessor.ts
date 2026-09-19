@@ -82,17 +82,19 @@ export class JsProcessor implements Processor {
         return activeDocument.body.hasClass('theme-dark');
     }
 
-    private async toSvg(source: string): Promise<string> {
+    private async toSvg(source: string, el: HTMLElement): Promise<string | null> {
         const lines = toDiagramLines(source);
         if (lines.length === 0) {
             throw new Error(EMPTY_SOURCE);
         }
-        return renderDiagram(lines, this.isDark());
+        return renderDiagram(lines, this.isDark(), el);
     }
 
     svg = async(source: string, el: HTMLElement, _: MarkdownPostProcessorContext) => {
         try {
-            insertSvgImage(el, await this.toSvg(source));
+            const svg = await this.toSvg(source, el);
+            if (svg === null) return;
+            insertSvgImage(el, svg);
         } catch (error) {
             console.error(error);
             renderMessage(el, toMessage(error));
@@ -101,7 +103,9 @@ export class JsProcessor implements Processor {
 
     png = async(source: string, el: HTMLElement, _: MarkdownPostProcessorContext) => {
         try {
-            const image = await rasterise(await this.toSvg(source));
+            const svg = await this.toSvg(source, el);
+            if (svg === null) return;
+            const image = await rasterise(svg);
             insertImageWithMap(el, image, "", plantuml.encode(source));
             const img = el.querySelector("img");
             img?.addEventListener("error", () => {
