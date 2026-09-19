@@ -33,12 +33,25 @@ let hardTimer: ReturnType<typeof setTimeout> | null = null;
 let engine: Promise<RenderToString> | null = null;
 let engineStuck = false;
 let loadEngine: EngineLoader = loadBundledEngine;
+let disposed = false;
+let previousViz: PropertyDescriptor | undefined;
+let assignedViz: unknown = null;
+let ownsViz = false;
 
 async function loadBundledEngine(): Promise<RenderToString> {
     const viz = await import("@viz-js/viz");
+    if (disposed) {
+        throw new Error(ENGINE_LOAD_FAILED);
+    }
     // `Viz` is a JavaScript global that the engine reads, not a DOM lookup.
     // eslint-disable-next-line obsidianmd/prefer-active-doc
-    (globalThis as {Viz?: unknown}).Viz = viz;
+    const vizGlobal = globalThis as {Viz?: unknown};
+    if (!ownsViz || vizGlobal.Viz !== assignedViz) {
+        previousViz = Object.getOwnPropertyDescriptor(vizGlobal, "Viz");
+    }
+    vizGlobal.Viz = viz;
+    assignedViz = viz;
+    ownsViz = true;
 
     const core = await import("@plantuml/core");
     return core.renderToString;
@@ -141,6 +154,9 @@ async function drain(): Promise<void> {
         release(job);
         return;
     }
+    if (disposed) {
+        return;
+    }
 
     softTimer = armTimer(() => {
         softTimer = null;
@@ -179,6 +195,9 @@ async function drain(): Promise<void> {
  * one diagram is rendered at a time.
  */
 export function renderDiagram(lines: string[], dark: boolean, block?: HTMLElement): Promise<string | null> {
+    if (disposed) {
+        return Promise.resolve(null);
+    }
     return new Promise<string | null>((resolve, reject) => {
         const job: RenderJob = {lines, dark, block, settled: false, resolve, reject};
         const pendingIndex = block === undefined ? -1 : queue.findIndex(queued => queued.block === block);
@@ -190,6 +209,36 @@ export function renderDiagram(lines: string[], dark: boolean, block?: HTMLElemen
         }
         void drain();
     });
+}
+
+export function disposeRenderer(): void {
+    disposed = true;
+    clearTimers();
+    if (current !== null) {
+        resolveJob(current, null);
+        current = null;
+    }
+    let job = queue.shift();
+    while (job !== undefined) {
+        resolveJob(job, null);
+        job = queue.shift();
+    }
+    engine = null;
+
+    if (ownsViz) {
+        // eslint-disable-next-line obsidianmd/prefer-active-doc
+        const vizGlobal = globalThis as {Viz?: unknown};
+        if (vizGlobal.Viz === assignedViz) {
+            if (previousViz === undefined) {
+                Reflect.deleteProperty(vizGlobal, "Viz");
+            } else {
+                Object.defineProperty(vizGlobal, "Viz", previousViz);
+            }
+        }
+        ownsViz = false;
+        assignedViz = null;
+        previousViz = undefined;
+    }
 }
 
 /**

@@ -10,6 +10,7 @@ import {LOGO_SVG} from "./const";
 import {Processor} from "./processors/processor";
 import {ServerProcessor} from "./processors/serverProcessor";
 import {JsProcessor} from "./processors/jsProcessor";
+import {disposeRenderer} from "./processors/jsRenderer";
 import {Replacer} from "./functions";
 import {PumlView, VIEW_TYPE} from "./PumlView";
 import localforage from "localforage";
@@ -74,6 +75,7 @@ export default class PlantumlPlugin extends Plugin {
     }
 
     onload(): void {
+        this.register(disposeRenderer);
         void this.loadSettings().then(async () => {
             this.addSettingTab(new PlantUMLSettingsTab(this));
             this.replacer = new Replacer(this);
@@ -194,7 +196,7 @@ export default class PlantumlPlugin extends Plugin {
     }
 
     onunload(): void {
-        this.observer.disconnect();
+        this.observer?.disconnect();
         this.app.embedRegistry.unregisterExtensions(['puml', 'pu']);
     }
 
