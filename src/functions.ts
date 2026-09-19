@@ -29,12 +29,15 @@ export class Replacer {
                 return "File with name: " + split[0] + " not found";
             }
             let alias = file.basename;
+            if (split[1]) {
+                alias = split[1];
+            }
             if(filetype === "png") {
                 const url = (this.plugin.app as unknown as AppWithObsidianUrl).getObsidianUrl(file);
-                if (split[1]) {
-                    alias = split[1];
-                }
                 return "[[" + url + " " + alias + "]]";
+            }
+            if (filetype === "svg") {
+                return "[[\"" + file.basename + "\" " + alias + "]]";
             }
             return "[[" + file.basename + "]]";
         }));
