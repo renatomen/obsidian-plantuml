@@ -9,6 +9,7 @@ const ASCII_UNSUPPORTED = "The bundled PlantUML renderer cannot produce ASCII ar
 const EMPTY_SOURCE = "The PlantUML diagram is empty.";
 const UNDECODABLE_SVG = "The rendered PlantUML diagram could not be decoded as an image.";
 const RENDER_FAILED = "The PlantUML diagram could not be rendered.";
+const IMAGE_TOO_LARGE = "The PlantUML diagram is too large to draw as an image. Use a plantuml-svg block instead.";
 const PNG_DATA_URL = "data:image/png;base64,";
 
 function renderMessage(el: HTMLElement, message: string): void {
@@ -53,11 +54,19 @@ async function rasterise(svg: string): Promise<string> {
     canvas.width = image.naturalWidth;
     canvas.height = image.naturalHeight;
     const context = canvas.getContext("2d");
-    context.drawImage(image, 0, 0);
+    if (context === null) {
+        throw new Error(IMAGE_TOO_LARGE);
+    }
 
-    const dataUrl = canvas.toDataURL("image/png");
+    let dataUrl: string;
+    try {
+        context.drawImage(image, 0, 0);
+        dataUrl = canvas.toDataURL("image/png");
+    } catch {
+        throw new Error(IMAGE_TOO_LARGE);
+    }
     if (!dataUrl.startsWith(PNG_DATA_URL) || dataUrl.length === PNG_DATA_URL.length) {
-        throw new Error(RENDER_FAILED);
+        throw new Error(IMAGE_TOO_LARGE);
     }
     return dataUrl.slice(PNG_DATA_URL.length);
 }
@@ -94,6 +103,13 @@ export class JsProcessor implements Processor {
         try {
             const image = await rasterise(await this.toSvg(source));
             insertImageWithMap(el, image, "", plantuml.encode(source));
+            const img = el.querySelector("img");
+            img?.addEventListener("error", () => {
+                if (el.querySelector("img") !== img) return;
+                const error = new Error(IMAGE_TOO_LARGE);
+                console.error(error);
+                renderMessage(el, IMAGE_TOO_LARGE);
+            }, {once: true});
         } catch (error) {
             console.error(error);
             renderMessage(el, toMessage(error));
