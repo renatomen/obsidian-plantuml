@@ -19,8 +19,9 @@ const ENGINE_STUCK = "The PlantUML engine stopped responding. Reload Obsidian to
 interface RenderJob {
     lines: string[];
     dark: boolean;
+    block?: HTMLElement;
     settled: boolean;
-    resolve: (svg: string) => void;
+    resolve: (svg: string | null) => void;
     reject: (error: Error) => void;
 }
 
@@ -59,7 +60,7 @@ function initEngine(): Promise<RenderToString> {
     return started;
 }
 
-function resolveJob(job: RenderJob, svg: string): void {
+function resolveJob(job: RenderJob, svg: string | null): void {
     if (job.settled) {
         return;
     }
@@ -129,6 +130,7 @@ async function drain(): Promise<void> {
     if (job === undefined) {
         return;
     }
+    job.block = undefined;
     current = job;
 
     let render: RenderToString;
@@ -176,9 +178,16 @@ async function drain(): Promise<void> {
  * every render already in flight. The engine keeps shared internal state, so only
  * one diagram is rendered at a time.
  */
-export function renderDiagram(lines: string[], dark: boolean): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-        queue.push({lines, dark, settled: false, resolve, reject});
+export function renderDiagram(lines: string[], dark: boolean, block?: HTMLElement): Promise<string | null> {
+    return new Promise<string | null>((resolve, reject) => {
+        const job: RenderJob = {lines, dark, block, settled: false, resolve, reject};
+        const pendingIndex = block === undefined ? -1 : queue.findIndex(queued => queued.block === block);
+        if (pendingIndex === -1) {
+            queue.push(job);
+        } else {
+            resolveJob(queue[pendingIndex], null);
+            queue[pendingIndex] = job;
+        }
         void drain();
     });
 }
