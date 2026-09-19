@@ -30,9 +30,10 @@ whether or not you enable it. It also has real limits compared to the server and
 see `Known issues` below.
 
 ## Usage
-Create a fenced codeblock using `plantuml` as the language.
-Specify your plantuml code inside.
-To generate a diagram with higher resolution use `plantuml-svg`
+Create a fenced code block using `plantuml` or `puml` as the language.
+Specify your PlantUML code inside.
+Plain `plantuml` and `puml` blocks use the **Default diagram format** setting, which defaults to PNG and can be set to SVG for sharper diagrams.
+Explicit format fences such as `plantuml-png` and `plantuml-svg` override this setting.
 
 You can also use `plantuml-ascii` to generate ASCII Art.
 
