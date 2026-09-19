@@ -8,6 +8,7 @@ export class DebouncedProcessors implements Processor {
     SECONDS_TO_MS_FACTOR = 1000;
 
     debounceMap = new Map<string, Debouncer<[string, HTMLElement, MarkdownPostProcessorContext], unknown>>();
+    latestSourceByElement = new WeakMap<HTMLElement, {originalSource: string; source: string; ctx: MarkdownPostProcessorContext}>();
 
     debounceTime: number;
     plugin: PlantumlPlugin;
@@ -45,6 +46,7 @@ export class DebouncedProcessors implements Processor {
             ? this.plugin.settings.darkHeader
             : this.plugin.settings.lightHeader;
         source = this.plugin.settings.header + "\r\n" + themeHeader + "\r\n" + source;
+        this.latestSourceByElement.set(el, {originalSource, source, ctx});
 
         if (el.dataset.plantumlDebounce) {
             const debounceId = el.dataset.plantumlDebounce;
@@ -59,6 +61,7 @@ export class DebouncedProcessors implements Processor {
 
             await processor(source, el, ctx);
             el.addEventListener('contextmenu', (event) => {
+                const {originalSource, source, ctx} = this.latestSourceByElement.get(el);
 
                 const menu = new Menu()
                     .addItem(item => {
