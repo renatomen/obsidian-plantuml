@@ -1,5 +1,6 @@
-import {FileSystemAdapter, MarkdownPostProcessorContext, TAbstractFile} from "obsidian";
+import {FileSystemAdapter, parseLinktext, TAbstractFile} from "obsidian";
 import PlantumlPlugin from "./main";
+import {ProcessorContext} from "./processors/processor";
 
 interface VaultWithDirectParent { getDirectParent(file: TAbstractFile): { path: string } | null; }
 interface AppWithObsidianUrl { getObsidianUrl(file: unknown): string; }
@@ -16,27 +17,45 @@ export class Replacer {
     }
 
     /**
+     * add the header lines to the diagram, PlantUML ignores everything before `@startxxx`,
+     * so they are inserted after it, or at the top if the diagram does not have a start tag.
+     * @param text the diagram source
+     * @param headers the headers to insert, empty ones are skipped
+     */
+    public insertHeaders(text: string, ...headers: string[]): string {
+        const header = headers.filter(value => value.trim().length > 0).join("\n");
+        if (header.length === 0) {
+            return text;
+        }
+        if (!/^[ \t]*@start/m.test(text)) {
+            return header + "\n" + text;
+        }
+        return text.replace(/^[ \t]*@start.*$/gm, (start: string) => start + "\n" + header);
+    }
+
+    /**
      * replace all links in the plugin syntax with valid plantuml links to note inside the vault
      * @param text the text, in which to replace all links
-     * @param path path of the current file
+     * @param sourcePath vault path of the file containing the diagram
      * @param filetype
      */
-    public replaceLinks(text: string, path: string, filetype: string) : string {
+    public replaceLinks(text: string, sourcePath: string, filetype: string) : string {
         return text.replace(/\[\[\[([\s\S]*?)\]\]\]/g, ((_: string, args: string) => {
             const split = args.split("|");
-            const file = this.plugin.app.metadataCache.getFirstLinkpathDest(split[0], path);
-            if(!file) {
-                return "File with name: " + split[0] + " not found";
-            }
-            let alias = file.basename;
+            const alias = split[1];
+            const {path, subpath} = parseLinktext(split[0]);
+            // links to headings or blocks in the same note have an empty path
+            const file = this.plugin.app.metadataCache.getFirstLinkpathDest(path || sourcePath, sourcePath);
+            const target = (file ? file.basename : path) + subpath;
             if(filetype === "png") {
-                const url = (this.plugin.app as unknown as AppWithObsidianUrl).getObsidianUrl(file);
-                if (split[1]) {
-                    alias = split[1];
-                }
-                return "[[" + url + " " + alias + "]]";
+                const url = file
+                    ? (this.plugin.app as unknown as AppWithObsidianUrl).getObsidianUrl(file) + encodeURIComponent(subpath)
+                    : "obsidian://new?vault=" + encodeURIComponent(this.plugin.app.vault.getName()) + "&file=" + encodeURIComponent(path);
+                return "[[" + url + " " + (alias || target) + "]]";
             }
-            return "[[" + file.basename + "]]";
+            // plantuml uses the first space to separate the url from the label, unless the url is quoted
+            const url = /\s/.test(target) ? "\"" + target + "\"" : target;
+            return "[[" + url + (alias ? " " + alias : "") + "]]";
         }));
     }
 
@@ -63,7 +82,7 @@ export class Replacer {
         return this.plugin.app.vault.adapter.getFullPath(folder?.path ?? "");
     }
 
-    public getPath(ctx: MarkdownPostProcessorContext): string {
+    public getPath(ctx: ProcessorContext): string {
         return this.getFullPath(ctx ? ctx.sourcePath : '');
     }
 
@@ -76,16 +95,48 @@ export class Replacer {
 export function toDiagramLines(source: string): string[] {
     const lines = source.split(/\r\n|\r|\n/);
 
-    // DebouncedProcessors prepends `header + CRLF + themeHeader + CRLF`, and both
-    // header settings default to empty, so source normally arrives with two blank
-    // leading lines. PlantUML reads the first line as the diagram directive and
-    // rejects a blank one with `the following directive "" is not recognized`.
+    // PlantUML reads the first line as the diagram directive and rejects a blank one.
     let start = 0;
     let end = lines.length;
     while (start < end && lines[start].trim().length === 0) start++;
     while (end > start && lines[end - 1].trim().length === 0) end--;
 
     return lines.slice(start, end);
+}
+
+/**
+ * whether a link target is an url with a scheme (https:, mailto:, obsidian:, ...) instead of a note in the vault
+ */
+function isExternalUrl(href: string): boolean {
+    return /^[a-z][a-z0-9+.-]*:/i.test(href);
+}
+
+/**
+ * get the link text of a link to a note in this vault inside a rendered diagram.
+ * png image maps link to obsidian:// urls, svg links contain the link text itself.
+ * @param link the clicked `a` or `area` element
+ * @param vaultName name of the current vault
+ * @return the link text, or null if the link does not point to a note in this vault
+ */
+export function getInternalLinkText(link: Element, vaultName: string): string | null {
+    const href = link.getAttribute("href") ?? link.getAttribute("xlink:href");
+    if (!href || href.startsWith("#")) return null;
+
+    const obsidianUrl = href.match(/^obsidian:\/\/(open|new)\?(.*)$/);
+    if (obsidianUrl) {
+        const params = new URLSearchParams(obsidianUrl[2]);
+        if (params.get("vault") !== vaultName) return null;
+        return params.get("file");
+    }
+
+    //any other scheme (http:, mailto:, ...) is an external link
+    if (isExternalUrl(href)) return null;
+
+    try {
+        return decodeURIComponent(href);
+    } catch {
+        return href;
+    }
 }
 
 export function insertImageWithMap(el: HTMLElement, image: string, map: string, encodedDiagram: string) {
@@ -107,8 +158,31 @@ export function insertImageWithMap(el: HTMLElement, image: string, map: string, 
             const cloned = mapEl.cloneNode(true) as Element;
             cloned.setAttr("name", encodedDiagram);
             el.appendChild(cloned);
+            scaleImageMap(img, cloned);
         }
     }
+}
+
+/**
+ * image map coordinates are in pixels of the original image,
+ * keep them in sync with the size the image is actually displayed at
+ * @param img the image the map belongs to
+ * @param map the map element
+ */
+function scaleImageMap(img: HTMLImageElement, map: Element) {
+    const areas = Array.from(map.querySelectorAll("area"));
+    const coords = areas.map(area => area.getAttribute("coords") ?? "");
+
+    const scale = () => {
+        if (!img.naturalWidth || !img.width) return;
+        const factor = img.width / img.naturalWidth;
+        areas.forEach((area, i) => {
+            area.setAttr("coords", coords[i].split(",").map(coord => Math.round(parseFloat(coord) * factor)).join(","));
+        });
+    };
+
+    img.addEventListener("load", scale);
+    new ResizeObserver(scale).observe(img);
 }
 
 export function insertAsciiImage(el: HTMLElement, image: string) {
@@ -128,10 +202,33 @@ export function insertSvgImage(el: HTMLElement, image: string) {
     const links = svg.getElementsByTagName("a");
     for (let i = 0; i < links.length; i++) {
         const link = links[i];
-        link.addClass("internal-link");
+        const href = link.getAttribute("href") ?? link.getAttributeNS("http://www.w3.org/1999/xlink", "href") ?? "";
+        if (isExternalUrl(href)) {
+            link.addClass("external-link");
+            link.setAttr("target", "_blank");
+            link.setAttr("rel", "noopener");
+        } else {
+            link.addClass("internal-link");
+        }
     }
 
-    el.appendChild(activeDocument.importNode(svg.documentElement, true));
+    const svgEl = activeDocument.importNode(svg.documentElement, true);
+    svgEl.addClass("puml-svg");
+    el.appendChild(svgEl);
+}
 
+/**
+ * serialize the svg as a standalone XML document.
+ * outerHTML uses HTML serialization, which emits entities like &nbsp; that are not valid in XML
+ */
+export function serializeSvg(svg: SVGElement): string {
+    return new XMLSerializer().serializeToString(svg);
+}
 
+export function insertErrorMessage(el: HTMLElement, error: unknown) {
+    el.empty();
+
+    const container = el.createDiv({cls: "puml-error"});
+    container.createEl("p", {text: "PlantUML diagram could not be rendered", cls: "mod-error"});
+    container.createEl("pre").createEl("code", {text: error instanceof Error ? error.message : `${error as string}`});
 }
