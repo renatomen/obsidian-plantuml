@@ -70,7 +70,8 @@ export class PumlView extends TextFileView {
         super(leaf);
         this.plugin = plugin;
 
-        this.debounced = debounce(this.plugin.getProcessor().png, this.plugin.settings.debounce * 1000, true);
+        const processor = this.plugin.getProcessor();
+        this.debounced = debounce(this.plugin.settings.defaultProcessor === "png" ? processor.png : processor.svg, this.plugin.settings.debounce * 1000, true);
 
         this.sourceEl = this.contentEl.createDiv({cls: 'plantuml-source-view', attr: {'style': 'display: block'}});
         this.previewEl = this.contentEl.createDiv({cls: 'plantuml-preview-view', attr: {'style': 'display: none'}});

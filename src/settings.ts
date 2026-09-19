@@ -108,8 +108,8 @@ export class PlantUMLSettingsTab extends PluginSettingTab {
                 ]
             },
             {
-                name: 'Default processor for includes',
-                desc: 'Any .pu/.puml files linked will use this processor.',
+                name: 'Default diagram format',
+                desc: 'Format for plain plantuml and puml code blocks, embedded .puml and .pu files, the .puml file view, and link hover previews. SVG stays sharp on high-resolution screens. Blocks such as plantuml-png or plantuml-svg keep their own format. Takes effect after reloading Obsidian.',
                 control: {
                     type: 'dropdown',
                     key: 'defaultProcessor',
