@@ -39,6 +39,13 @@ export class DebouncedProcessors implements Processor {
         el.dataset.filetype = filetype;
         el.createEl("h6", {text: "Generating PlantUML diagram", cls: "puml-loading"});
 
+        source = this.plugin.replacer.decodeWhiteSpaces(source);
+        source = this.plugin.replacer.replaceLinks(source, this.plugin.replacer.getPath(ctx), filetype);
+        const themeHeader = activeDocument.body.hasClass('theme-dark')
+            ? this.plugin.settings.darkHeader
+            : this.plugin.settings.lightHeader;
+        source = this.plugin.settings.header + "\r\n" + themeHeader + "\r\n" + source;
+
         if (el.dataset.plantumlDebounce) {
             const debounceId = el.dataset.plantumlDebounce;
             if (this.debounceMap.has(debounceId)) {
@@ -47,15 +54,9 @@ export class DebouncedProcessors implements Processor {
         } else {
             const func = debounce(processor, this.debounceTime, true);
             const uuid = uuidv4();
-            el.dataset.plantumlDebouce = uuid;
+            el.dataset.plantumlDebounce = uuid;
             this.debounceMap.set(uuid, func);
 
-            source = this.plugin.replacer.decodeWhiteSpaces(source);
-            source = this.plugin.replacer.replaceLinks(source, this.plugin.replacer.getPath(ctx), filetype);
-            const themeHeader = activeDocument.body.hasClass('theme-dark')
-                ? this.plugin.settings.darkHeader
-                : this.plugin.settings.lightHeader;
-            source = this.plugin.settings.header + "\r\n" + themeHeader + "\r\n" + source;
             await processor(source, el, ctx);
             el.addEventListener('contextmenu', (event) => {
 
